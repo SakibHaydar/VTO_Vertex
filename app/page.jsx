@@ -24,6 +24,28 @@ const fileToBase64 = (file) =>
         reader.onerror = (err) => reject(err);
     });
 
+const resizeAndCompressImage = (dataUrl, maxWidth = 1024, maxHeight = 1024, quality = 0.8) => {
+    return new Promise((resolve) => {
+        const img = new window.Image();
+        img.src = dataUrl;
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxWidth || height > maxHeight) {
+                const ratio = Math.min(maxWidth / width, maxHeight / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(dataUrl); // fallback
+    });
+};
+
 export default function VTOStudio() {
     // ── Garment state ──────────────────────────────────
     const [garmentImage, setGarmentImage] = useState(null); // { dataUrl, mimeType }
@@ -58,7 +80,8 @@ export default function VTOStudio() {
         if (!file) return;
         if (file.size > 10 * 1024 * 1024) { toast.error('File too large (max 10MB)'); return; }
         const dataUrl = await fileToBase64(file);
-        setGarmentImage({ dataUrl, mimeType: file.type || 'image/jpeg' });
+        const compressedDataUrl = await resizeAndCompressImage(dataUrl);
+        setGarmentImage({ dataUrl: compressedDataUrl, mimeType: 'image/jpeg' });
         setProcessedImage(null);
         e.target.value = '';
     };
@@ -69,7 +92,8 @@ export default function VTOStudio() {
         if (!file) return;
         if (file.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB)'); return; }
         const dataUrl = await fileToBase64(file);
-        setPersonImage({ dataUrl, mimeType: file.type || 'image/jpeg' });
+        const compressedDataUrl = await resizeAndCompressImage(dataUrl);
+        setPersonImage({ dataUrl: compressedDataUrl, mimeType: 'image/jpeg' });
         setProcessedImage(null);
         e.target.value = '';
     };
@@ -89,7 +113,7 @@ export default function VTOStudio() {
         setCameraActive(false);
     };
 
-    const capturePhoto = () => {
+    const capturePhoto = async () => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) return;
@@ -97,7 +121,8 @@ export default function VTOStudio() {
         canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
         const dataUrl = canvas.toDataURL('image/jpeg');
-        setPersonImage({ dataUrl, mimeType: 'image/jpeg' });
+        const compressedDataUrl = await resizeAndCompressImage(dataUrl);
+        setPersonImage({ dataUrl: compressedDataUrl, mimeType: 'image/jpeg' });
         setProcessedImage(null);
         stopCamera();
         setPersonTab('upload');
